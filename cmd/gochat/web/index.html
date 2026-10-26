@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GoChat</title>
+  <style>
+    :root {
+      --bg: #0f1115; --panel: #161a22; --panel2: #1c212b; --border: #2a3140;
+      --text: #e6e9ef; --muted: #8b93a3; --accent: #4f8cff; --accent2: #7aa2ff;
+      --danger: #ff5c5c; --ok: #3ddc84;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+    header { padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--panel); display: flex; align-items: center; gap: 14px; }
+    header h1 { font-size: 18px; margin: 0; font-weight: 700; letter-spacing: 0.5px; }
+    header .status { margin-left: auto; color: var(--muted); font-size: 12px; }
+    header .status.ok { color: var(--ok); }
+    main { display: grid; grid-template-columns: 260px 1fr 300px; height: calc(100vh - 57px); }
+    section { overflow: auto; padding: 14px; }
+    .sidebar { background: var(--panel); border-right: 1px solid var(--border); }
+    .right { background: var(--panel); border-left: 1px solid var(--border); }
+    #login, #register { display: flex; flex-direction: column; gap: 8px; max-width: 320px; margin: 40px auto; }
+    #app { display: none; }
+    input, button { font: inherit; }
+    input { background: var(--panel2); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 6px; outline: none; }
+    input:focus { border-color: var(--accent); }
+    button { background: var(--accent); color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    button:hover { background: var(--accent2); }
+    button.secondary { background: var(--panel2); border: 1px solid var(--border); color: var(--text); }
+    button.danger { background: var(--danger); }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .hint { color: var(--muted); font-size: 12px; }
+    .room-list .room { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; }
+    .room-list .room:hover { background: var(--panel2); }
+    .room-list .room.active { background: #22304a; }
+    .room-list .room .count { color: var(--muted); font-size: 11px; }
+    #chat { display: flex; flex-direction: column; height: 100%; }
+    #chat-head { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; }
+    #chat-head .topic { color: var(--muted); font-size: 12px; }
+    #messages { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+    .msg { max-width: 78%; padding: 7px 10px; border-radius: 9px; background: var(--panel2); border: 1px solid var(--border); }
+    .msg .meta { font-size: 11px; color: var(--muted); display: flex; gap: 6px; }
+    .msg .name { color: var(--accent2); font-weight: 600; }
+    .msg.dm { align-self: flex-end; background: #1e2a40; border-color: #2c3d5e; }
+    .msg .body { white-space: pre-wrap; word-break: break-word; }
+    .msg .locked { color: var(--muted); font-size: 11px; }
+    .join { color: var(--muted); font-size: 12px; text-align: center; }
+    #typing { color: var(--muted); font-size: 12px; height: 18px; padding: 0 16px; }
+    #compose { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); }
+    #compose input { flex: 1; }
+    .member { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border-radius: 6px; font-size: 13px; }
+    .member .sending { font-size: 11px; color: var(--muted); }
+    .tab-bar { display: flex; gap: 4px; margin-bottom: 10px; }
+    .tab-bar button { padding: 4px 10px; font-size: 12px; background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 20px; }
+    .tab-bar button.active { color: #fff; border-color: var(--accent); }
+    #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #2a3140; color: var(--text); padding: 9px 16px; border-radius: 8px; display: none; z-index: 10; }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 200px 1fr; }
+      .right { display: none; }
+    }
+  </style>
+  <script src="/nacl-fast.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>GoChat</h1>
+    <span id="conn-status" class="status">disconnected</span>
+    <button id="logout" class="secondary" style="display:none">Log out</button>
+  </header>
+
+  <div id="login">
+    <h2>Sign in</h2>
+    <input id="login-user" placeholder="username" autocomplete="username">
+    <input id="login-pass" type="password" placeholder="password" autocomplete="current-password">
+    <button id="login-btn">Sign in</button>
+    <div class="hint">No account? <a href="#" id="show-register">Register one</a> (minimum 8-char password).</div>
+  </div>
+
+  <div id="register" style="display:none">
+    <h2>Create account</h2>
+    <input id="reg-user" placeholder="username" autocomplete="username">
+    <input id="reg-display" placeholder="display name (optional)">
+    <input id="reg-pass" type="password" placeholder="password" autocomplete="new-password">
+    <button id="reg-btn">Create account</button>
+    <div class="hint"><a href="#" id="show-login">Back to sign in</a></div>
+  </div>
+
+  <div id="app">
+    <main>
+      <section class="sidebar">
+        <div class="tab-bar">
+          <button class="active" data-tab="rooms">Rooms</button>
+          <button data-tab="users">Users</button>
+        </div>
+        <div id="tab-rooms">
+          <div style="display:flex; gap:6px; margin-bottom:10px">
+            <input id="new-room" placeholder="new room name" maxlength="64">
+            <button id="create-room" class="secondary">+</button>
+          </div>
+          <div id="room-list" class="room-list"></div>
+        </div>
+        <div id="tab-users" style="display:none">
+          <div style="margin-bottom:10px" class="hint">Click a user to send an encrypted DM.</div>
+          <div id="user-list"></div>
+        </div>
+      </section>
+
+      <section id="chat">
+        <div id="chat-head">
+          <div id="chat-title" style="font-weight:700">Select a room</div>
+          <div id="chat-sub" class="topic"></div>
+          <button id="leave-room" class="secondary" style="margin-left:auto; display:none">Leave</button>
+        </div>
+        <div id="messages"></div>
+        <div id="typing"></div>
+        <div id="compose">
+          <input id="msg-input" placeholder="Message (in a room: everyone sees plaintext; DM: end-to-end encrypted)" disabled>
+          <button id="send-btn" disabled>Send</button>
+        </div>
+      </section>
+
+      <section class="right">
+        <div style="font-weight:700; margin-bottom:10px">Members</div>
+        <div id="member-list" class="member-list"></div>
+        <div style="margin-top:16px; font-size:11px; color:var(--muted)" id="e2e-status"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast"></div>
+  <script src="/app.js"></script>
+</body>
+</html>
